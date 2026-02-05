@@ -2738,6 +2738,8 @@ static unsigned long __mmap_region(struct file *file, unsigned long addr,
 
 	map.check_ksm_early = can_set_ksm_flags_early(&map);
 
+	// 先不看 一堆操作 先梳理主干
+	// 后面没找到PTE相关的操作 估计是在这里
 	error = __mmap_setup(&map, &desc, uf);
 	if (!error && have_mmap_prepare)
 		error = call_mmap_prepare(&map, &desc);
@@ -2954,9 +2956,12 @@ unsigned long unmapped_area(struct vm_unmapped_area_info *info)
 		low_limit = mmap_min_addr;
 	high_limit = info->high_limit;
 retry:
+	// 由低到高寻找符合长度的VMA
 	if (vma_iter_area_lowest(&vmi, low_limit, high_limit, length))
 		return -ENOMEM;
 
+	// check VMA前后gap是否符合
+	// 为什么不直接带着gap寻找呢 这样会写出来的寻找函数更加通用
 	/*
 	 * Adjust for the gap first so it doesn't interfere with the later
 	 * alignment. The first step is the minimum needed to fulfill the start
@@ -2966,8 +2971,10 @@ retry:
 	gap = vma_iter_addr(&vmi) + info->start_gap;
 	gap += (info->align_offset - gap) & info->align_mask;
 	tmp = vma_next(&vmi);
+	// 这种需要gap 为什么不在入餐指定时就算上前后gap
 	if (tmp && (tmp->vm_flags & VM_STARTGAP_FLAGS)) { /* Avoid prev check if possible */
 		if (vm_start_gap(tmp) < gap + length - 1) {
+			// 更新寻找起点
 			low_limit = tmp->vm_end;
 			vma_iter_reset(&vmi);
 			goto retry;
@@ -2975,6 +2982,7 @@ retry:
 	} else {
 		tmp = vma_prev(&vmi);
 		if (tmp && vm_end_gap(tmp) > gap) {
+			// 更新寻找起点
 			low_limit = vm_end_gap(tmp);
 			vma_iter_reset(&vmi);
 			goto retry;
@@ -3003,6 +3011,7 @@ unsigned long unmapped_area_topdown(struct vm_unmapped_area_info *info)
 
 	/* Adjust search length to account for worst case alignment overhead */
 	length = info->length + info->align_mask + info->start_gap;
+	// 加了还更小 说明上溢了
 	if (length < info->length)
 		return -ENOMEM;
 

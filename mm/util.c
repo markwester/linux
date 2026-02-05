@@ -572,12 +572,15 @@ unsigned long vm_mmap_pgoff(struct file *file, unsigned long addr,
 	unsigned long populate;
 	LIST_HEAD(uf);
 
+	// some security ops, not care about it
 	ret = security_mmap_file(file, prot, flag);
 	if (!ret)
 		ret = fsnotify_mmap_perm(file, prot, off, len);
 	if (!ret) {
+		// lock ops
 		if (mmap_write_lock_killable(mm))
 			return -EINTR;
+		// mmap core function
 		ret = do_mmap(file, addr, len, prot, flag, 0, pgoff, &populate,
 			      &uf);
 		mmap_write_unlock(mm);

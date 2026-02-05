@@ -401,6 +401,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	vm_flags |= calc_vm_prot_bits(prot, pkey) | calc_vm_flag_bits(file, flags) |
 			mm->def_flags | VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
 
+	// 找符合要求的VMA 返回addr
 	/* Obtain the address to map to. we verify (or select) it and ensure
 	 * that it represents a valid section of the address space.
 	 */
@@ -408,6 +409,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	if (IS_ERR_VALUE(addr))
 		return addr;
 
+	// 啥玩意儿 先不考虑
 	if (flags & MAP_FIXED_NOREPLACE) {
 		if (find_vma_intersection(mm, addr, addr + len))
 			return -EEXIST;
@@ -420,6 +422,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	if (!mlock_future_ok(mm, vm_flags & VM_LOCKED, len))
 		return -EAGAIN;
 
+	// 文件映射
 	if (file) {
 		struct inode *inode = file_inode(file);
 		unsigned long flags_mask;
@@ -491,6 +494,8 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 		if (err)
 			return (unsigned long)err;
 	} else {
+		// 匿名映射 只读shared与private
+		/* 为什么shared就忽略pgoff 而private需要算pgoff why? */
 		switch (flags & MAP_TYPE) {
 		case MAP_SHARED:
 			if (vm_flags & (VM_GROWSDOWN|VM_GROWSUP))
@@ -555,7 +560,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 		if (file && is_file_hugepages(file))
 			vm_flags |= VM_NORESERVE;
 	}
-
+	// 真正映射
 	addr = mmap_region(file, addr, len, vm_flags, pgoff, uf);
 	if (!IS_ERR_VALUE(addr) &&
 	    ((vm_flags & VM_LOCKED) ||
@@ -572,6 +577,7 @@ unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
 	unsigned long retval;
 
 	if (!(flags & MAP_ANONYMOUS)) {
+		// file page, need get file from fd
 		audit_mmap_fd(fd, flags);
 		file = fget(fd);
 		if (!file)
@@ -583,6 +589,7 @@ unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
 			goto out_fput;
 		}
 	} else if (flags & MAP_HUGETLB) {
+		// huge page, not care about it.
 		struct hstate *hs;
 
 		hs = hstate_sizelog((flags >> MAP_HUGE_SHIFT) & MAP_HUGE_MASK);
@@ -602,6 +609,7 @@ unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
 			return PTR_ERR(file);
 	}
 
+	// file == NULL means anonymous, otherwise file page
 	retval = vm_mmap_pgoff(file, addr, len, prot, flags, pgoff);
 out_fput:
 	if (file)
@@ -665,6 +673,8 @@ unsigned long vm_unmapped_area(struct vm_unmapped_area_info *info)
 {
 	unsigned long addr;
 
+	// 不太明白AREA TOPDOWN是个什么特性 是指VMA内从高地址向低地址xx的？
+	// 似乎是find方向不同 topdown是从高地址向低地址找 反之 是由低到高
 	if (info->flags & VM_UNMAPPED_AREA_TOPDOWN)
 		addr = unmapped_area_topdown(info);
 	else
@@ -701,8 +711,11 @@ generic_get_unmapped_area(struct file *filp, unsigned long addr,
 	if (flags & MAP_FIXED)
 		return addr;
 
+	// 指定了addr 就从按addr找符合条件的vma [addr, addr+len) 空闲的
 	if (addr) {
 		addr = PAGE_ALIGN(addr);
+		// why dose find the prev vma
+		// 似乎是为了确认不与前后VMA相交
 		vma = find_vma_prev(mm, addr, &prev);
 		if (mmap_end - len >= addr && addr >= mmap_min_addr &&
 		    (!vma || addr + len <= vm_start_gap(vma)) &&
@@ -710,9 +723,11 @@ generic_get_unmapped_area(struct file *filp, unsigned long addr,
 			return addr;
 	}
 
+	// 不指定addr 或者指定的addr的VMA找不到
 	info.length = len;
 	info.low_limit = mm->mmap_base;
 	info.high_limit = mmap_end;
+	// 栈保护
 	info.start_gap = stack_guard_placement(vm_flags);
 	if (filp && is_file_hugepages(filp))
 		info.align_mask = huge_page_mask_align(filp);
@@ -848,6 +863,7 @@ __get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 		addr = thp_get_unmapped_area_vmflags(file, addr, len,
 						     pgoff, flags, vm_flags);
 	} else {
+		// !file && !MAP_SHARED
 		addr = mm_get_unmapped_area_vmflags(file, addr, len,
 						    pgoff, flags, vm_flags);
 	}
