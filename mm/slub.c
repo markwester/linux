@@ -404,11 +404,11 @@ struct node_barn {
 struct slab_sheaf {
 	union {
 		struct rcu_head rcu_head;
-		struct list_head barn_list;
+		struct list_head barn_list;	// 在 barn 中的链表节点
 		/* only used for prefilled sheafs */
 		struct {
-			unsigned int capacity;
-			bool pfmemalloc;
+			unsigned int capacity;	// 预填充 sheaf 的容量
+			bool pfmemalloc;	// 是否来自 PF_MEMALLOC 保留内存
 		};
 	};
 	struct kmem_cache *cache;
