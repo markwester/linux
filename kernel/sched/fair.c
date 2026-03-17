@@ -10118,9 +10118,11 @@ static unsigned long scale_rt_capacity(int cpu)
 
 static void update_cpu_capacity(struct sched_domain *sd, int cpu)
 {
+	// 获取扣除 RT/DL/IRQ 后的可用容量
 	unsigned long capacity = scale_rt_capacity(cpu);
 	struct sched_group *sdg = sd->groups;
 
+	// 容量不能为 0
 	if (!capacity)
 		capacity = 1;
 

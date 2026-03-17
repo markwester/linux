@@ -1199,6 +1199,7 @@ static struct sched_group *get_group(int cpu, struct sd_data *sdd)
 	struct sched_group *sg;
 	bool already_visited;
 
+	// 关键：如果有子域，使用子域的第一个 CPU
 	if (child)
 		cpu = cpumask_first(sched_domain_span(child));
 
@@ -1251,16 +1252,21 @@ build_sched_groups(struct sched_domain *sd, int cpu)
 
 	cpumask_clear(covered);
 
+	// 遍历该域的所有 CPU
 	for_each_cpu_wrap(i, span, cpu) {
 		struct sched_group *sg;
 
+		// 如果该 CPU 已经被某个组覆盖，跳过
 		if (cpumask_test_cpu(i, covered))
 			continue;
 
+		// 获取该 CPU 对应的调度组
 		sg = get_group(i, sdd);
 
+		// 标记该组覆盖的所有 CPU
 		cpumask_or(covered, covered, sched_group_span(sg));
 
+		// 域内各组 构建循环链表
 		if (!first)
 			first = sg;
 		if (last)
@@ -1302,6 +1308,7 @@ static void init_sched_groups_capacity(int cpu, struct sched_domain *sd)
 			cpumask_andnot(mask, mask, cpu_smt_mask(cpu));
 #endif
 		}
+		// 组内物理核心数 不考虑SMT
 		sg->cores = cores;
 
 		if (!(sd->flags & SD_ASYM_PACKING))
@@ -1310,6 +1317,7 @@ static void init_sched_groups_capacity(int cpu, struct sched_domain *sd)
 		for_each_cpu(cpu, sched_group_span(sg)) {
 			if (max_cpu < 0)
 				max_cpu = cpu;
+			// prefer 依照什么
 			else if (sched_asym_prefer(cpu, max_cpu))
 				max_cpu = cpu;
 		}
@@ -1319,9 +1327,12 @@ next:
 		sg = sg->next;
 	} while (sg != sd->groups);
 
+	// 只在负载均衡 CPU 上更新组容量
 	if (cpu != group_balance_cpu(sg))
 		return;
 
+	// 更新组容量（核心步骤） 子组非NUMA时，域的cap就是子组的cap和
+	// 底层域（无子域），仅计算单个CPU容量
 	update_group_capacity(sd, cpu);
 }
 
@@ -2581,6 +2592,7 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 
 			has_asym |= sd->flags & SD_ASYM_CPUCAPACITY;
 
+			// 设置每个cpu的根域
 			if (tl == sched_domain_topology)
 				*per_cpu_ptr(d.sd, i) = sd;
 			if (cpumask_equal(cpu_map, sched_domain_span(sd)))
